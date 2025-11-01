@@ -1,0 +1,43 @@
+# Frappe Deployment Package
+frappe_deployment/
+
+# Environment configuration
+.env
+
+# Backup files (never commit sensitive data)
+backups/*.sql.gz
+backups/*.sql
+backups/*.json
+backups/*.tar.gz
+backups/*.zip
+
+# Keep the directory structure
+!backups/.gitkeep
+!backups/.gitignore
+
+# Logs
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE
+.vscode/
+.idea/
+*.sublime-*
+
+# Temporary files
+*.tmp
+*.bak
+*.backup

@@ -1,0 +1,7 @@
+# Backup fayllarni bu papkaga qo'ying
+# 
+# Masalan:
+# - database-backup.sql.gz
+# - site_config_backup.json
+#
+# Bu fayllar .gitignore orqali git ga yuklanmaydi

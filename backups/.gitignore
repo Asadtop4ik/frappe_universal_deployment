@@ -1,0 +1,6 @@
+*.sql.gz
+*.sql
+*.json
+site_config_backup.json
+private_files.tar
+!.gitkeep
