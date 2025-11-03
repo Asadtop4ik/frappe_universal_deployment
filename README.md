@@ -1,17 +1,20 @@
 # 🚀 Universal Frappe/ERPNext Deployment Package
 
-Professional deployment solution for Frappe/ERPNext projects with backup restore capabilities.
+Professional deployment solution for Frappe/ERPNext projects with CI/CD, domain setup, and backup restore capabilities.
 
 ## 📋 Features
 
 - ✅ Universal deployment script for any Frappe/ERPNext project
 - ✅ Flexible app configuration (ERPNext, HRMS, custom apps)
+- ✅ **GitHub Actions CI/CD template** (automatic deployment)
+- ✅ **Domain & SSL setup** (Let's Encrypt)
+- ✅ **DigitalOcean UI guide** (step-by-step)
 - ✅ Optional backup restore
 - ✅ Production-ready setup (Nginx, Supervisor)
 - ✅ All lessons learned from production deployments
 - ✅ Senior DevOps best practices
 
-## 🎯 Quick Start
+## 🎯 Quick Start (Manual Deploy)
 
 ### 1. Setup Configuration
 
@@ -65,18 +68,83 @@ chmod +x deploy/deploy.sh
 ./deploy/deploy.sh
 ```
 
+---
+
+## 🤖 CI/CD Setup (Automatic Deployment)
+
+**GitHub Actions orqali avtomatik deploy!**
+
+### Quick Setup:
+
+```bash
+# 1. Copy workflow template to your Frappe app
+cp templates/github-workflow.yml your-app/.github/workflows/deploy.yml
+
+# 2. GitHub Secrets configure qiling:
+#    - SSH_PRIVATE_KEY
+#    - SERVER_IP
+#    - SITE_NAME
+#    - DB_PASSWORD
+#    - ADMIN_PASSWORD
+
+# 3. Push to main branch
+git push origin main
+# → Avtomatik deploy bo'ladi! 🚀
+```
+
+**📚 Batafsil guide:** [CI_CD_SETUP.md](CI_CD_SETUP.md)
+
+---
+
+## 🌐 Domain & SSL Setup
+
+**Domain ulash va HTTPS yoqish:**
+
+### Option 1: Initial Deploy bilan
+
+```bash
+# .env da
+SITE_NAME="akfa.uz"          # .local o'rniga real domain
+SETUP_SSL="true"
+SSL_DOMAIN="akfa.uz"
+SSL_EMAIL="admin@akfa.uz"
+
+# Deploy qiling - avtomatik SSL o'rnatiladi
+```
+
+### Option 2: Existing Site ga
+
+```bash
+# Server ga SSH qiling
+ssh root@your-server-ip
+
+# Domain setup script ishga tushiring
+./setup-domain.sh
+# Interactive prompts follow...
+```
+
+**📚 Batafsil guide:** [DIGITALOCEAN_SETUP.md](DIGITALOCEAN_SETUP.md) - Section 4
+
+---
+
 ## 📦 Project Structure
 
 ```
 frappe_deployment/
 ├── .env.example              # Configuration template
 ├── README.md                 # This file
+├── DIGITALOCEAN_SETUP.md     # DigitalOcean UI guide (NEW!)
+├── CI_CD_SETUP.md            # GitHub Actions guide (NEW!)
+├── DEPLOYMENT_WORKFLOW.md    # Real-world workflow
 ├── deploy/
 │   ├── deploy.sh            # Main deployment script
 │   └── README.md            # Deployment details
-├── backups/                 # Backup files (git ignored)
-│   ├── .gitignore
-│   └── .gitkeep
+├── templates/
+│   └── github-workflow.yml  # CI/CD template (NEW!)
+├── setup-domain.sh          # Domain & SSL setup (NEW!)
+└── backups/                 # Backup files (git ignored)
+    ├── .gitignore
+    └── .gitkeep
 ```
 
 ## 🔧 Configuration Guide
@@ -129,6 +197,21 @@ SSL_EMAIL="admin@yourdomain.com"
 ### Case 1: New Empty Site
 
 ```bash
+## 📚 Documentation
+
+- **[DIGITALOCEAN_SETUP.md](DIGITALOCEAN_SETUP.md)** - DigitalOcean UI orqali server yaratish, firewall, domain sozlash
+- **[CI_CD_SETUP.md](CI_CD_SETUP.md)** - GitHub Actions avtomatik deployment setup
+- **[DEPLOYMENT_WORKFLOW.md](DEPLOYMENT_WORKFLOW.md)** - Real-world deployment scenario
+- **[deploy/README.md](deploy/README.md)** - Deploy script batafsil ma'lumot
+- **[APP_README_TEMPLATE.md](APP_README_TEMPLATE.md)** - Custom app uchun README template
+
+---
+
+## 🎓 Usage Examples
+
+### Case 1: Fresh Installation
+
+```bash
 # .env configuration
 SITE_NAME="newsite.local"
 APPS_TO_INSTALL="frappe,erpnext"
@@ -155,6 +238,32 @@ CUSTOM_APP_REPO="https://github.com/mycompany/my_custom_app.git"
 RESTORE_BACKUP="false"
 ```
 
+### Case 4: Production with Domain & SSL
+
+```bash
+# .env configuration
+SITE_NAME="erp.company.com"
+APPS_TO_INSTALL="frappe,erpnext,hrms,custom_app"
+SETUP_SSL="true"
+SSL_DOMAIN="erp.company.com"
+SSL_EMAIL="admin@company.com"
+```
+
+### Case 5: CI/CD Deployment
+
+```bash
+# GitHub Secrets configure qiling (once):
+# - SSH_PRIVATE_KEY, SERVER_IP, SITE_NAME, etc.
+
+# Keyin har safar:
+git add .
+git commit -m "New feature"
+git push origin main
+# → Avtomatik deploy! 🎉
+```
+
+---
+
 ## 🐛 Troubleshooting
 
 ### Permission Issues
@@ -177,6 +286,33 @@ cd ~/frappe-bench
 bench build --force
 exit
 sudo supervisorctl restart all
+```
+
+### SSL Certificate Error
+
+```bash
+# Manual renewal
+sudo certbot renew
+
+# Check certificate
+sudo certbot certificates
+
+# Re-run Let's Encrypt
+sudo -u frappe bench renew-lets-encrypt
+```
+
+### Domain Not Accessible
+
+```bash
+# Check DNS
+dig yourdomain.com +short
+
+# Check Nginx
+sudo systemctl status nginx
+sudo nginx -t
+
+# Check site config
+sudo -u frappe bench --site yoursite show-config
 ```
 
 ### Database Connection Error
