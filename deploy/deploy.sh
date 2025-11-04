@@ -202,10 +202,6 @@ frappe ALL=(ALL) NOPASSWD: /usr/bin/certbot renew
 frappe ALL=(ALL) NOPASSWD: /usr/bin/certbot certonly *
 frappe ALL=(ALL) NOPASSWD: /usr/bin/certbot --nginx *
 
-# File permissions management (for bench setup production)
-frappe ALL=(ALL) NOPASSWD: /bin/chown -R frappe\:frappe *
-frappe ALL=(ALL) NOPASSWD: /bin/chmod -R * /home/frappe/frappe-bench/*
-
 SUDOERS
     
     chmod 0440 /etc/sudoers.d/$FRAPPE_USER
