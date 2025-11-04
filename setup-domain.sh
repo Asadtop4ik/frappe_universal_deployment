@@ -2,8 +2,29 @@
 
 ###############################################################################
 # DOMAIN SETUP SCRIPT FOR FRAPPE/ERPNEXT
+# Author: Senior DevOps Engineer
+# Version: 2.0 (2025-11-04)
 # Purpose: Add domain and setup SSL for existing Frappe site
-# Usage: ./setup-domain.sh
+#
+# USAGE:
+#   1. DigitalOcean da DNS sozlang:
+#      - A Record: yourdomain.com → SERVER_IP
+#      - A Record: www.yourdomain.com → SERVER_IP
+#   2. 5-10 daqiqa DNS propagation kutish
+#   3. Script ishga tushiring: sudo ./setup-domain.sh
+#
+# FEATURES:
+#   ✅ Automatic domain addition to Frappe site
+#   ✅ Let's Encrypt SSL certificate (HTTPS)
+#   ✅ Auto-renewal cron job
+#   ✅ Nginx configuration with SSL
+#   ✅ HTTP to HTTPS redirect
+#   ✅ Backup before changes
+#
+# REQUIREMENTS:
+#   - Root access
+#   - DNS A record configured (manual in DigitalOcean)
+#   - Existing Frappe site
 ###############################################################################
 
 set -e
@@ -176,29 +197,73 @@ if [[ "$SETUP_SSL" =~ ^[Yy]$ ]]; then
     # Install certbot if not present
     if ! command -v certbot &> /dev/null; then
         log "Certbot o'rnatilmoqda..."
-        apt-get update -y
-        apt-get install -y certbot python3-certbot-nginx
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update -qq
+        apt-get install -y certbot python3-certbot-nginx -qq
     fi
     
-    # Setup Let's Encrypt
-    sudo -u $FRAPPE_USER bash << EOF
-set -e
-cd $BENCH_PATH
-export PATH=\$PATH:~/.local/bin
-
-# Let's Encrypt setup
-sudo bench setup lets-encrypt $SITE_NAME \
-    --custom-domain $DOMAIN \
-    --email $SSL_EMAIL
-
-EOF
+    # Get SSL certificate
+    log "SSL sertifikat olinmoqda..."
+    certbot certonly --nginx \
+        -d $DOMAIN \
+        -d www.$DOMAIN \
+        --non-interactive \
+        --agree-tos \
+        --email $SSL_EMAIL \
+        --quiet || {
+            warning "Certbot xatolik berdi, manual configuration ishlatilmoqda..."
+        }
     
-    log "SSL o'rnatildi ✓"
+    # Check if certificate exists
+    if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
+        log "SSL sertifikat muvaffaqiyatli olindi ✓"
+        
+        # Configure Nginx with SSL
+        log "Nginx SSL konfiguratsiya qilinmoqda..."
+        
+        # Create SSL snippet
+        cat > /tmp/ssl_snippet_$DOMAIN.conf << SSLEOF
+    # SSL Configuration
+    listen 443 ssl http2;
+    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
+    
+    # SSL Security
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+    
+    # HTTP to HTTPS redirect
+    if (\$scheme != "https") {
+        return 301 https://\$host\$request_uri;
+    }
+SSLEOF
+        
+        # Add SSL to nginx config
+        if ! grep -q "ssl_certificate.*$DOMAIN" /etc/nginx/sites-available/frappe-bench.conf; then
+            sed -i "/listen 80;/a\    include /tmp/ssl_snippet_$DOMAIN.conf;" /etc/nginx/sites-available/frappe-bench.conf
+            log "Nginx SSL config qo'shildi ✓"
+        else
+            info "SSL config allaqachon mavjud"
+        fi
+        
+        # Test nginx
+        if nginx -t 2>/dev/null; then
+            systemctl reload nginx
+            log "Nginx qayta yuklandi ✓"
+        else
+            error "Nginx config xatosi! Manual tekshiring: nginx -t"
+        fi
+        
+        log "SSL o'rnatildi ✓"
+    else
+        error "SSL sertifikat olinmadi! DNS to'g'ri sozlanganini tekshiring."
+    fi
     
     # Setup auto-renewal
     log "SSL auto-renewal sozlanmoqda..."
     
-    CRON_JOB="0 0 * * * certbot renew --quiet && supervisorctl restart all"
+    CRON_JOB="0 3 * * * certbot renew --quiet --post-hook 'systemctl reload nginx'"
     
     # Check if cron job already exists
     if ! crontab -l 2>/dev/null | grep -q "certbot renew"; then
@@ -291,25 +356,30 @@ echo -e "${GREEN}╚════════════════════
 echo ""
 info "🌐 Domain: $DOMAIN"
 info "📁 Site: $SITE_NAME"
+info "🖥️  Server IP: $SERVER_IP"
 
 if [[ "$SETUP_SSL" =~ ^[Yy]$ ]]; then
     info "🔒 SSL: Enabled (HTTPS)"
     info "🌐 URL: https://$DOMAIN"
+    info "🔄 Auto-renewal: Configured (daily check at 3 AM)"
+    info "📅 Certificate expires: $(openssl x509 -enddate -noout -in /etc/letsencrypt/live/$DOMAIN/fullchain.pem 2>/dev/null | cut -d= -f2 || echo 'N/A')"
 else
-    info "🔒 SSL: Not enabled"
+    info "🔒 SSL: Not enabled (HTTP only)"
     info "🌐 URL: http://$DOMAIN"
 fi
 
 echo ""
-log "Next Steps:"
-echo "  1. Brauzerda ochib ko'ring: $SITE_URL"
-echo "  2. Login qiling va ishlashini tekshiring"
+log "✅ Next Steps:"
+echo "  1. Brauzerda ochib ko'ring: https://$DOMAIN"
+echo "  2. Login: Administrator / [your password]"
+echo "  3. SSL badge tekshiring (🔒 Secure)"
 if [[ ! "$SETUP_SSL" =~ ^[Yy]$ ]]; then
-    echo "  3. SSL uchun qayta scriptni ishga tushiring"
+    echo "  4. SSL uchun qayta scriptni ishga tushiring"
 fi
 echo ""
 
-log "Backup location: $BACKUP_DIR"
+info "💾 Backup location: $BACKUP_DIR"
+info "📝 Logs: /var/log/letsencrypt/letsencrypt.log"
 echo ""
 
 # ============================================
