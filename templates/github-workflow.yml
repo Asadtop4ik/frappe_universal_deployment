@@ -3,15 +3,20 @@
 # ============================================
 # Bu fayl TEMPLATE - har bir projectga nusxa ko'chiring!
 #
+# VERSION: 2.1 (2025-11-04)
+# CHANGES:
+# - ✅ Auto-detect git remote name (origin yoki upstream)
+# - ✅ Frappe user sudo permissions (minimal & secure)
+# - ✅ Service restart via root user (xavfsizlik uchun)
+#
 # USAGE:
-# 1. Bu faylni nusxa ko'chiring: akfa_accounting/.github/workflows/deploy.yml
+# 1. Bu faylni nusxa ko'chiring: cash_flow_app/.github/workflows/deploy.yml
 # 2. GitHub Settings → Secrets → Actions da quyidagilarni qo'shing:
 #    - SERVER_IP
 #    - SSH_PRIVATE_KEY
 #    - SITE_NAME
-#    - DB_PASSWORD
-#    - ADMIN_PASSWORD
-#    - APPS_TO_INSTALL (ixtiyoriy)
+#    - DB_PASSWORD (ixtiyoriy - fresh deployment uchun)
+#    - ADMIN_PASSWORD (ixtiyoriy - fresh deployment uchun)
 # 3. main branch ga push qiling - avtomatik deploy bo'ladi!
 #
 # ============================================
