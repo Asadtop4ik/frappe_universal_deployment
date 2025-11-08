@@ -320,6 +320,23 @@ if [ "$ENABLE_SCHEDULER" = "true" ]; then
     bench --site $SITE_NAME scheduler enable
 fi
 
+# ============================================
+# CRITICAL: Run migrate to apply fixtures
+# ============================================
+# After installing apps, MUST run migrate to:
+# 1. Apply database schema changes (DocTypes)
+# 2. Import fixtures (Custom Fields, Property Setters, DocPerms)
+# 3. Run after_migrate hooks (force_sync functions)
+echo "🔄 Running migrations and syncing fixtures..."
+bench --site $SITE_NAME migrate
+
+# Clear cache after migrate (ALWAYS!)
+echo "🧹 Clearing cache..."
+bench --site $SITE_NAME clear-cache
+bench --site $SITE_NAME clear-website-cache
+
+echo "✅ Migrations and cache cleared successfully"
+
 EOF
 
     log "Site yaratildi ✓"
