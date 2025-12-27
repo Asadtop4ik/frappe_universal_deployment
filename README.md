@@ -63,7 +63,7 @@ scp -r frappe_universal_deploy root@your-server-ip:/root/
 ssh root@your-server-ip
 
 # Run deployment
-cd /root/frappe_deployment
+cd /root/frappe_universal_deploy
 chmod +x deploy/deploy.sh
 ./deploy/deploy.sh
 ```
