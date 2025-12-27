@@ -57,7 +57,7 @@ CONFIG_BACKUP_FILE="site_config_backup.json"
 
 ```bash
 # Upload to server
-scp -r frappe_deployment root@your-server-ip:/root/
+scp -r frappe_universal_deploy root@your-server-ip:/root/
 
 # SSH to server
 ssh root@your-server-ip
