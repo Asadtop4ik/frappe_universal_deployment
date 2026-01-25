@@ -29,7 +29,7 @@ on:
 env:
   FRAPPE_VERSION: "version-15"
   PYTHON_VERSION: "3.11"
-  NODE_VERSION: "18"
+  NODE_VERSION: "20"
   BENCH_PATH: "/home/frappe/frappe-bench"
 
 jobs:

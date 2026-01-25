@@ -255,29 +255,54 @@ set -e
 cd $BENCH_PATH
 export PATH=\$PATH:~/.local/bin
 
-# Har bir appni o'rnatish
+# ============================================
+# PHASE 1: CORE APPS (frappe, erpnext, hrms)
+# Bu applar 99% ishga tushadi, xatolik kam
+# ============================================
+echo "📦 Phase 1: Installing CORE apps..."
+
 IFS=',' read -ra APPS <<< "$APPS_TO_INSTALL"
 for app in "\${APPS[@]}"; do
     app=\$(echo \$app | xargs)  # trim whitespace
     
     if [ "\$app" = "frappe" ]; then
-        echo "Frappe allaqachon o'rnatilgan"
+        echo "✓ Frappe allaqachon o'rnatilgan"
         continue
     fi
     
     if [ "\$app" = "erpnext" ]; then
+        echo "📥 Installing ERPNext..."
         bench get-app --branch $FRAPPE_VERSION erpnext
+        echo "✓ ERPNext installed"
     elif [ "\$app" = "hrms" ]; then
+        echo "📥 Installing HRMS..."
         bench get-app --branch $FRAPPE_VERSION hrms
-    else
-        # Custom app (GitHub URL kerak)
-        if [ -n "$CUSTOM_APP_REPO" ]; then
-            bench get-app $CUSTOM_APP_REPO
-        else
-            echo "WARNING: Custom app \$app uchun CUSTOM_APP_REPO o'rnatilmagan!"
-        fi
+        echo "✓ HRMS installed"
     fi
 done
+
+# ============================================
+# PHASE 2: CUSTOM APPS (ixtiyoriy)
+# Agar xato bo'lsa, base apps ishlab turadi
+# ============================================
+if [ -n "$CUSTOM_APP_REPO" ]; then
+    echo ""
+    echo "📦 Phase 2: Installing CUSTOM app..."
+    echo "⚠️  WARNING: Custom app xato berishi mumkin"
+    echo "⚠️  Agar xato bo'lsa, base apps (ERPNext) ishlab turadi"
+    
+    # Try-catch mantiq: xato bo'lsa davom et
+    if bench get-app $CUSTOM_APP_REPO; then
+        echo "✓ Custom app muvaffaqiyatli o'rnatildi"
+    else
+        echo "❌ ERROR: Custom app o'rnatilmadi!"
+        echo "   Repo: $CUSTOM_APP_REPO"
+        echo "   Base deployment davom etadi..."
+    fi
+else
+    echo ""
+    echo "ℹ️  Custom app o'rnatilmaydi (CUSTOM_APP_REPO bo'sh)"
+fi
 
 EOF
 
@@ -300,15 +325,43 @@ bench new-site $SITE_NAME \
     --admin-password $ADMIN_PASSWORD \
     --mariadb-root-password '$MARIADB_ROOT_PASSWORD'
 
-# Applarni site ga o'rnatish
+# ============================================
+# INSTALL APPS TO SITE (Smart Error Handling)
+# ============================================
+echo ""
+echo "📦 Installing apps to site..."
+
+# Phase 1: Core apps (must succeed)
 IFS=',' read -ra APPS <<< "$APPS_TO_INSTALL"
 for app in "\${APPS[@]}"; do
     app=\$(echo \$app | xargs)
     
-    if [ "\$app" != "frappe" ]; then
-        bench --site $SITE_NAME install-app \$app || true
+    if [ "\$app" = "frappe" ]; then
+        continue
+    fi
+    
+    if [ "\$app" = "erpnext" ] || [ "\$app" = "hrms" ]; then
+        echo "📥 Installing \$app to site..."
+        bench --site $SITE_NAME install-app \$app
+        echo "✓ \$app installed successfully"
     fi
 done
+
+# Phase 2: Custom app (optional, may fail)
+if [ -n "$CUSTOM_APP_REPO" ] && [ -n "$CUSTOM_APP_NAME" ]; then
+    echo ""
+    echo "📦 Installing custom app: $CUSTOM_APP_NAME"
+    echo "⚠️  If this fails, base system will still work"
+    
+    if bench --site $SITE_NAME install-app $CUSTOM_APP_NAME; then
+        echo "✓ Custom app installed to site"
+    else
+        echo "❌ Custom app installation failed"
+        echo "   Base system (ERPNext) is still functional"
+        echo "   Debug manually: su - frappe, cd frappe-bench"
+        echo "   Then: bench --site $SITE_NAME install-app $CUSTOM_APP_NAME"
+    fi
+fi
 
 # Developer mode
 if [ "$DEVELOPER_MODE" = "true" ]; then
