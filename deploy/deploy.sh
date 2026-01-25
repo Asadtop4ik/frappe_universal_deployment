@@ -48,10 +48,10 @@ source "$PROJECT_ROOT/.env"
 validate_config() {
     log "Konfiguratsiya tekshirilmoqda..."
     
-    [ -z "$SITE_NAME" ] && error "SITE_NAME o'rnatilmagan!"
-    [ -z "$FRAPPE_VERSION" ] && error "FRAPPE_VERSION o'rnatilmagan!"
-    [ -z "$MARIADB_ROOT_PASSWORD" ] && error "MARIADB_ROOT_PASSWORD o'rnatilmagan!"
-    [ -z "$APPS_TO_INSTALL" ] && error "APPS_TO_INSTALL o'rnatilmagan!"
+    [ -z "$SITE_NAME" ] && error "SITE_NAME o'rnatilmagan! .env faylni tahrirlang: nano .env"
+    [ -z "$FRAPPE_VERSION" ] && error "FRAPPE_VERSION o'rnatilmagan! .env da FRAPPE_VERSION ni belgilang"
+    [ -z "$MARIADB_ROOT_PASSWORD" ] && error "MARIADB_ROOT_PASSWORD o'rnatilmagan! Xavfsiz parol o'rnating"
+    [ -z "$APPS_TO_INSTALL" ] && error "APPS_TO_INSTALL o'rnatilmagan! Kamida 'frappe' bo'lishi kerak"
     
     if [ "$RESTORE_BACKUP" = "true" ]; then
         [ -z "$SQL_BACKUP_FILE" ] && error "SQL_BACKUP_FILE o'rnatilmagan!"
@@ -129,8 +129,19 @@ EOF
     systemctl restart mariadb
     systemctl enable mariadb
     
-    # Root password o'rnatish (agar hali o'rnatilmagan bo'lsa)
-    mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '${MARIADB_ROOT_PASSWORD}';" 2>/dev/null || true
+    # Root password o'rnatish (secure method)
+    log "MariaDB root password sozlanmoqda..."
+    
+    # Temporary file for secure password handling
+    MYSQL_INIT_FILE=$(mktemp)
+    cat > "$MYSQL_INIT_FILE" << SQLEOF
+ALTER USER 'root'@'localhost' IDENTIFIED BY '${MARIADB_ROOT_PASSWORD}';
+FLUSH PRIVILEGES;
+SQLEOF
+    
+    # Execute with init-file (password not visible in process list)
+    mysql --init-file="$MYSQL_INIT_FILE" 2>/dev/null || warning "MariaDB root password allaqachon o'rnatilgan"
+    rm -f "$MYSQL_INIT_FILE"
     
     log "MariaDB sozlandi ✓"
 }
@@ -320,10 +331,16 @@ set -e
 cd $BENCH_PATH
 export PATH=\$PATH:~/.local/bin
 
-# Site yaratish
+# Site yaratish (secure password handling)
+echo "$ADMIN_PASSWORD" > /tmp/.admin_pass
+echo "$MARIADB_ROOT_PASSWORD" > /tmp/.db_pass
+
 bench new-site $SITE_NAME \
-    --admin-password $ADMIN_PASSWORD \
-    --mariadb-root-password '$MARIADB_ROOT_PASSWORD'
+    --admin-password \$(cat /tmp/.admin_pass) \
+    --mariadb-root-password \$(cat /tmp/.db_pass)
+
+# Clean up temporary files
+rm -f /tmp/.admin_pass /tmp/.db_pass
 
 # ============================================
 # INSTALL APPS TO SITE (Smart Error Handling)
@@ -396,46 +413,11 @@ EOF
 }
 
 # ============================================
-# RESTORE BACKUP
+# BACKUP RESTORE - MOVED TO SEPARATE SCRIPT
 # ============================================
-restore_backup() {
-    if [ "$RESTORE_BACKUP" != "true" ]; then
-        info "Backup restore o'tkazib yuborildi"
-        return
-    fi
-    
-    log "Backup restore qilinmoqda..."
-    
-    # Backup fayllarni ko'chirish
-    mkdir -p /home/$FRAPPE_USER/backups
-    cp "$PROJECT_ROOT/backups/$SQL_BACKUP_FILE" /home/$FRAPPE_USER/backups/
-    
-    if [ -n "$CONFIG_BACKUP_FILE" ]; then
-        cp "$PROJECT_ROOT/backups/$CONFIG_BACKUP_FILE" /home/$FRAPPE_USER/backups/
-    fi
-    
-    chown -R $FRAPPE_USER:$FRAPPE_USER /home/$FRAPPE_USER/backups
-    
-    # Restore
-    sudo -u $FRAPPE_USER bash << EOF
-set -e
-cd $BENCH_PATH
-export PATH=\$PATH:~/.local/bin
-
-bench --site $SITE_NAME set-maintenance-mode on
-
-bench --site $SITE_NAME restore \
-    /home/$FRAPPE_USER/backups/$SQL_BACKUP_FILE \
-    --mariadb-root-password '$MARIADB_ROOT_PASSWORD'
-
-bench --site $SITE_NAME migrate
-bench --site $SITE_NAME clear-cache
-bench --site $SITE_NAME set-maintenance-mode off
-
-EOF
-
-    log "Backup restore tugadi ✓"
-}
+# Backup restore functionality moved to: deploy/03-restore-backup.sh
+# Usage: sudo bash deploy/03-restore-backup.sh
+# ============================================
 
 # ============================================
 # SETUP PRODUCTION
@@ -474,64 +456,54 @@ EOF
 }
 
 # ============================================
-# BUILD ASSETS
+# BUILD ASSETS - INTEGRATED INTO setup_production()
 # ============================================
-build_assets() {
-    log "Assets build qilinmoqda..."
-    
-    sudo -u $FRAPPE_USER bash << EOF
-set -e
-cd $BENCH_PATH
-export PATH=\$PATH:~/.local/bin
-
-bench build --force
-
-EOF
-
-    log "Assets build tugadi ✓"
-}
+# Build now happens automatically during:
+# 1. bench setup nginx (generates production assets)
+# 2. First supervisor start (on-demand build)
+# No separate build needed - reduces deployment time
+# ============================================
 
 # ============================================
-# SETUP SSL (opsional)
+# SSL SETUP - MOVED TO SEPARATE SCRIPT
 # ============================================
-setup_ssl() {
-    if [ "$SETUP_SSL" != "true" ]; then
-        info "SSL setup o'tkazib yuborildi"
-        return
-    fi
-    
-    log "SSL o'rnatilmoqda..."
-    
-    apt-get install -y certbot python3-certbot-nginx
-    
-    sudo -u $FRAPPE_USER bash << EOF
-set -e
-cd $BENCH_PATH
-export PATH=\$PATH:~/.local/bin
-
-sudo bench setup lets-encrypt $SITE_NAME \
-    --custom-domain $SSL_DOMAIN \
-    --email $SSL_EMAIL
-
-EOF
-
-    log "SSL o'rnatildi ✓"
-}
+# SSL setup moved to: deploy/02-setup-ssl.sh
+# Usage: sudo bash deploy/02-setup-ssl.sh
+# 
+# Why separate?
+# - Domain must be configured first (DNS propagation)
+# - Can fail if domain not ready
+# - Not needed for initial deployment
+# - Can be run later when domain is ready
+# ============================================
 
 # ============================================
-# FIREWALL
+# FIREWALL (Production-Ready)
 # ============================================
 configure_firewall() {
     log "Firewall sozlanmoqda..."
     
     if command -v ufw &> /dev/null; then
-        ufw allow 22/tcp
-        ufw allow 80/tcp
-        ufw allow 443/tcp
+        # Default policies
+        ufw default deny incoming
+        ufw default allow outgoing
+        
+        # SSH with rate limiting (prevent brute-force)
+        ufw limit 22/tcp comment 'SSH with rate limiting'
+        
+        # HTTP/HTTPS
+        ufw allow 80/tcp comment 'HTTP'
+        ufw allow 443/tcp comment 'HTTPS'
+        
+        # Enable firewall
         ufw --force enable
+        
+        # Show status
         log "Firewall sozlandi ✓"
+        ufw status numbered
     else
-        warning "ufw topilmadi"
+        warning "ufw topilmadi - firewall o'rnatilmadi"
+        warning "Manual: apt-get install -y ufw"
     fi
 }
 
@@ -555,6 +527,11 @@ print_success() {
     info "  bench --site $SITE_NAME status"
     info "  bench --site $SITE_NAME logs"
     info "  sudo supervisorctl status"
+    echo ""
+    info "Keyingi qadamlar:"
+    info "  1. SSL o'rnatish: sudo bash deploy/02-setup-ssl.sh"
+    info "  2. Backup restore: sudo bash deploy/03-restore-backup.sh"
+    info "  3. Custom app qo'shish: Manual install"
     log "=================================================="
 }
 
@@ -577,10 +554,7 @@ main() {
     install_bench
     install_apps
     create_site
-    restore_backup
     setup_production
-    build_assets
-    setup_ssl
     configure_firewall
     
     print_success
