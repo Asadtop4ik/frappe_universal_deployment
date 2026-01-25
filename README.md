@@ -6,13 +6,36 @@ Professional deployment solution for Frappe/ERPNext projects with CI/CD, domain 
 
 - ✅ Universal deployment script for any Frappe/ERPNext project
 - ✅ Flexible app configuration (ERPNext, HRMS, custom apps)
+- ✅ **Smart custom app handling** (base system never breaks)
+- ✅ **Zero-downtime CI/CD** (5-10 sec downtime vs 4 min)
 - ✅ **GitHub Actions CI/CD template** (automatic deployment)
-- ✅ **Domain & SSL setup** (Let's Encrypt)
+- ✅ **Modular scripts** (domain+SSL, backup restore separate)
+- ✅ **Node.js 20 LTS** (2026 recommended)
+- ✅ **Production security** (firewall, secure passwords)
 - ✅ **DigitalOcean UI guide** (step-by-step)
-- ✅ Optional backup restore
-- ✅ Production-ready setup (Nginx, Supervisor)
-- ✅ All lessons learned from production deployments
 - ✅ Senior DevOps best practices
+
+## 🆕 Recent Updates (2026-01-25)
+
+- ✅ Node.js 18 → 20 LTS (future-proof)
+- ✅ Zero-downtime CI/CD (build assets while live)
+- ✅ Smart custom app installation (base apps always succeed)
+- ✅ Modular deployment (SSL, backup separate scripts)
+- ✅ Enhanced security (password handling, firewall)
+- ✅ Removed keraksiz features (build_assets duplicate)
+
+## ⏱️ Deployment Timeline
+
+| Step | Duration | Details |
+|------|----------|----------|
+| Base Deploy | 8-12 min | System + Frappe + ERPNext/HRMS |
+| Domain + SSL | 2-3 min | DNS check + certificate |
+| Backup Restore | 3-5 min | Database + migrate |
+| **Total** | **15-20 min** | Full production setup |
+
+**Old vs New:**
+- **Old:** 20-25 min (everything in one script)
+- **New:** 8-12 min base (SSL/backup optional)
 
 ## 🎯 Quick Start (Manual Deploy)
 
@@ -62,10 +85,18 @@ scp -r frappe_universal_deploy root@your-server-ip:/root/
 # SSH to server
 ssh root@your-server-ip
 
-# Run deployment
+# Run base deployment
 cd /root/frappe_universal_deploy
-chmod +x deploy/deploy.sh
-./deploy/deploy.sh
+sudo bash deploy/deploy.sh
+# ✅ Base system (ERPNext/HRMS) o'rnatiladi
+# ✅ Production-ready
+# ✅ Custom app xato bersa ham base ishlaydi
+
+# (Optional) Domain va SSL
+sudo bash deploy/02-setup-domain-ssl.sh
+
+# (Optional) Backup restore
+sudo bash deploy/03-restore-backup.sh
 ```
 
 ---
@@ -97,6 +128,33 @@ git push origin main
 ---
 
 ## 🌐 Domain & SSL Setup
+
+**Modular script - deploy dan keyin alohida ishga tushiring!**
+
+### Method: Frappe Native (Recommended)
+
+```bash
+# 1. DNS configure (DigitalOcean/Cloudflare)
+# A Record: yourdomain.com → YOUR_SERVER_IP
+
+# 2. Wait for DNS propagation (5-10 min)
+dig yourdomain.com  # Check
+
+# 3. Run script
+sudo bash deploy/02-setup-domain-ssl.sh
+# → Interactive: site name, domain, email
+# → Auto: DNS check, domain add, SSL setup
+# → Result: https://yourdomain.com ✅
+```
+
+**Features:**
+- ✅ Frappe built-in commands only
+- ✅ DNS validation
+- ✅ Auto-renewal setup
+- ✅ No manual nginx editing
+- ✅ Backup before changes
+
+**Batafsil:** [DOMAIN_SETUP.md](DOMAIN_SETUP.md)
 
 **Domain ulash va HTTPS yoqish:**
 

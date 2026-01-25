@@ -2,6 +2,13 @@
 
 Bu papkada **universal** template lar bor - har qanday Frappe app uchun ishlatish mumkin.
 
+## 🆕 Recent Updates (2026-01-25)
+
+- ✅ **Zero-downtime deployment** (4 min → 5-10 sec)
+- ✅ Build assets while site is live
+- ✅ No maintenance mode (users stay connected)
+- ✅ Smart restart (only necessary services)
+
 ---
 
 ## 📋 **TEMPLATES:**
@@ -12,10 +19,11 @@ Frappe app larni **avtomatik deploy** qilish uchun workflow.
 
 **Features:**
 - ✅ Auto-detect app name (repository name dan)
-- ✅ Git pull + migrate + build + cache clear
-- ✅ Supervisor restart
+- ✅ **Zero-downtime:** Build → Migrate → Restart (5-10 sec)
+- ✅ No maintenance mode (site stays live)
+- ✅ Smart error handling
 - ✅ Health check
-- ✅ Update-only (fresh deployment frappe_universal_deploy ishlatadi)
+- ✅ Update-only (fresh deployment: `deploy/deploy.sh`)
 
 ---
 

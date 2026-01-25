@@ -9,16 +9,82 @@ This deployment script (`deploy.sh`) automates the complete setup of a Frappe/ER
 ### ✅ Node.js 20 LTS
 - **Changed:** Node.js 18 → 20 LTS (2026 recommended)
 - **Reason:** Node.js 18 support ends October 2026
+- **Impact:** Future-proof, better performance
 
 ### ✅ Smart Custom App Installation
 - **Problem:** Custom app errors broke entire deployment
 - **Solution:** 2-phase installation - core apps succeed even if custom app fails
 - **Result:** Base system (ERPNext) always installs successfully
+- **Example:** If `akfa_accounting` fails, ERPNext still works
 
 ### ✅ Zero-Downtime CI/CD
-- **Old:** 4 minutes downtime during code push
-- **New:** 5-10 seconds downtime
-- **How:** Build assets while site is live, only migrate requires brief pause
+- **Old:** 4 minutes downtime during code push (maintenance mode ON)
+- **New:** 5-10 seconds downtime (only restart)
+- **How:** Build assets while site is live, no maintenance mode
+- **Impact:** Users can work during deployment
+
+### ✅ Modular Scripts
+- **Separated:** SSL and backup to own scripts
+- **Reason:** Not always needed, can fail, easier to debug
+- **Files:**
+  - `deploy.sh` - Base only (8-12 min)
+  - `02-setup-domain-ssl.sh` - Domain + SSL (2-3 min)
+  - `03-restore-backup.sh` - Backup restore (3-5 min)
+
+### ✅ Security Enhancements
+- **Password handling:** No longer visible in `ps aux`
+- **Firewall:** SSH rate limiting (brute-force protection)
+- **MariaDB:** Secure init-file method
+- **Removed:** Keraksiz `build_assets()` function (duplicate)
+
+## Available Scripts
+
+### 1. `deploy.sh` - Base Deployment
+**Purpose:** Core Frappe/ERPNext installation  
+**Duration:** 8-12 minutes  
+**What it does:**
+- System dependencies
+- Frappe bench init
+- Core apps (frappe, erpnext, hrms)
+- Optional: Custom app (fault-tolerant)
+- Site creation
+- Production setup (nginx, supervisor)
+- Firewall configuration
+
+**Usage:**
+```bash
+sudo bash deploy/deploy.sh
+```
+
+### 2. `02-setup-domain-ssl.sh` - Domain & SSL
+**Purpose:** Add domain and Let's Encrypt SSL  
+**Duration:** 2-3 minutes  
+**What it does:**
+- DNS validation
+- Domain addition (Frappe native)
+- SSL certificate (Let's Encrypt)
+- Auto-renewal setup
+- Nginx auto-configuration
+
+**Usage:**
+```bash
+sudo bash deploy/02-setup-domain-ssl.sh
+```
+
+### 3. `03-restore-backup.sh` - Backup Restore
+**Purpose:** Restore database from backup  
+**Duration:** 3-5 minutes  
+**What it does:**
+- Interactive backup selection
+- Maintenance mode
+- Database restore
+- Migration
+- Cache clear
+
+**Usage:**
+```bash
+sudo bash deploy/03-restore-backup.sh
+```
 
 ## What It Does
 
