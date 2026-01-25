@@ -529,7 +529,7 @@ print_success() {
     info "  sudo supervisorctl status"
     echo ""
     info "Keyingi qadamlar:"
-    info "  1. SSL o'rnatish: sudo bash deploy/02-setup-ssl.sh"
+    info "  1. Domain & SSL: sudo bash deploy/02-setup-domain-ssl.sh"
     info "  2. Backup restore: sudo bash deploy/03-restore-backup.sh"
     info "  3. Custom app qo'shish: Manual install"
     log "=================================================="
