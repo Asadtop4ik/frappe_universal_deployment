@@ -147,10 +147,6 @@ jobs:
           set -e
           cd \${BENCH_PATH}
           
-          # Enable maintenance mode
-          echo "🔧 Enabling maintenance mode..."
-          bench --site \${SITE_NAME} set-maintenance-mode on || true
-          
           # Pull latest code - Auto-detect remote name
           echo "📥 Pulling latest code for \${APP_NAME}..."
           cd apps/\${APP_NAME}
@@ -171,6 +167,10 @@ jobs:
           # Install dependencies
           echo "📦 Installing Python dependencies..."
           bench setup requirements || true
+
+          # Build assets (Live - no downtime)
+          echo "🎨 Building frontend assets..."
+          bench build --app \${APP_NAME}
           
           # ============================================
           # CRITICAL: Run migrations to apply fixtures
@@ -178,18 +178,10 @@ jobs:
           echo "🗄️  Running database migrations..."
           bench --site \${SITE_NAME} migrate
           
-          # Build assets
-          echo "🎨 Building frontend assets..."
-          bench build --app \${APP_NAME}
-          
           # Clear cache (ALWAYS after migrate!)
           echo "🧹 Clearing cache..."
           bench --site \${SITE_NAME} clear-cache
           bench --site \${SITE_NAME} clear-website-cache
-          
-          # Disable maintenance mode
-          echo "✅ Disabling maintenance mode..."
-          bench --site \${SITE_NAME} set-maintenance-mode off
           
           echo "✅ Frappe user tasks completed!"
           FRAPPE_EOF
