@@ -263,19 +263,43 @@ SUDOERS
 install_bench() {
     log "Frappe Bench o'rnatilmoqda..."
     
-    sudo -u $FRAPPE_USER bash << EOF
+    sudo -u $FRAPPE_USER bash << 'EOF'
 set -e
 
 # Ubuntu 24.04 fix: --break-system-packages
 pip3 install frappe-bench --break-system-packages
 
-# PATH ga qo'shish
-echo 'export PATH=\$PATH:~/.local/bin' >> ~/.bashrc
-export PATH=\$PATH:~/.local/bin
+# PATH ga qo'shish (check if already exists)
+if ! grep -q "export PATH=\$PATH:~/.local/bin" ~/.bashrc; then
+    echo 'export PATH=$PATH:~/.local/bin' >> ~/.bashrc
+fi
+export PATH=$PATH:~/.local/bin
 
-# Bench init
-cd /home/$FRAPPE_USER
-bench init --frappe-branch $FRAPPE_VERSION $BENCH_PATH
+# Bench init with retry logic for yarn issues
+cd /home/frappe
+MAX_RETRIES=3
+RETRY_COUNT=0
+
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+    echo "🔄 Bench init attempt $((RETRY_COUNT + 1))/$MAX_RETRIES..."
+    
+    if bench init --frappe-branch version-15 frappe-bench; then
+        echo "✅ Bench init successful!"
+        break
+    else
+        RETRY_COUNT=$((RETRY_COUNT + 1))
+        if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+            echo "⚠️  Bench init failed, retrying in 10 seconds..."
+            echo "   (This is normal if yarn registry is temporarily unavailable)"
+            sleep 10
+            # Clean up failed attempt
+            rm -rf frappe-bench
+        else
+            echo "❌ Bench init failed after $MAX_RETRIES attempts"
+            exit 1
+        fi
+    fi
+done
 
 EOF
 
@@ -288,10 +312,38 @@ EOF
 install_apps() {
     log "Applar o'rnatilmoqda: $APPS_TO_INSTALL..."
     
-    sudo -u $FRAPPE_USER bash << EOF
+    sudo -u $FRAPPE_USER bash << 'EOF'
 set -e
-cd $BENCH_PATH
-export PATH=\$PATH:~/.local/bin
+cd /home/frappe/frappe-bench
+export PATH=$PATH:~/.local/bin
+
+# Helper function for retrying app installation
+install_app_with_retry() {
+    local app_name=$1
+    local app_source=$2
+    local max_retries=3
+    local retry_count=0
+    
+    while [ $retry_count -lt $max_retries ]; do
+        echo "🔄 Installing $app_name (attempt $((retry_count + 1))/$max_retries)..."
+        
+        if bench get-app $app_source; then
+            echo "✅ $app_name installed successfully!"
+            return 0
+        else
+            retry_count=$((retry_count + 1))
+            if [ $retry_count -lt $max_retries ]; then
+                echo "⚠️  Installation failed, retrying in 10 seconds..."
+                sleep 10
+                # Clean up failed attempt
+                rm -rf "apps/$app_name" 2>/dev/null || true
+            else
+                echo "❌ $app_name installation failed after $max_retries attempts"
+                return 1
+            fi
+        fi
+    done
+}
 
 # ============================================
 # PHASE 1: CORE APPS (frappe, erpnext, hrms)
@@ -299,23 +351,19 @@ export PATH=\$PATH:~/.local/bin
 # ============================================
 echo "📦 Phase 1: Installing CORE apps..."
 
-IFS=',' read -ra APPS <<< "$APPS_TO_INSTALL"
-for app in "\${APPS[@]}"; do
-    app=\$(echo \$app | xargs)  # trim whitespace
+IFS=',' read -ra APPS <<< "frappe,erpnext,hrms"
+for app in "${APPS[@]}"; do
+    app=$(echo $app | xargs)  # trim whitespace
     
-    if [ "\$app" = "frappe" ]; then
+    if [ "$app" = "frappe" ]; then
         echo "✓ Frappe allaqachon o'rnatilgan"
         continue
     fi
     
-    if [ "\$app" = "erpnext" ]; then
-        echo "📥 Installing ERPNext..."
-        bench get-app --branch $FRAPPE_VERSION erpnext
-        echo "✓ ERPNext installed"
-    elif [ "\$app" = "hrms" ]; then
-        echo "📥 Installing HRMS..."
-        bench get-app --branch $FRAPPE_VERSION hrms
-        echo "✓ HRMS installed"
+    if [ "$app" = "erpnext" ]; then
+        install_app_with_retry "erpnext" "--branch version-15 erpnext"
+    elif [ "$app" = "hrms" ]; then
+        install_app_with_retry "hrms" "--branch version-15 hrms"
     fi
 done
 
@@ -323,6 +371,9 @@ done
 # PHASE 2: CUSTOM APPS (ixtiyoriy)
 # Agar xato bo'lsa, base apps ishlab turadi
 # ============================================
+CUSTOM_APP_REPO=""
+CUSTOM_APP_NAME=""
+
 if [ -n "$CUSTOM_APP_REPO" ]; then
     echo ""
     echo "📦 Phase 2: Installing CUSTOM app..."
@@ -330,7 +381,7 @@ if [ -n "$CUSTOM_APP_REPO" ]; then
     echo "⚠️  Agar xato bo'lsa, base apps (ERPNext) ishlab turadi"
     
     # Try-catch mantiq: xato bo'lsa davom et
-    if bench get-app $CUSTOM_APP_REPO; then
+    if install_app_with_retry "$CUSTOM_APP_NAME" "$CUSTOM_APP_REPO"; then
         echo "✓ Custom app muvaffaqiyatli o'rnatildi"
     else
         echo "❌ ERROR: Custom app o'rnatilmadi!"
