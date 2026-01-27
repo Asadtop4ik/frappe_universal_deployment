@@ -43,6 +43,25 @@ fi
 source "$PROJECT_ROOT/.env"
 
 # ============================================
+# APPS CONFIGURATION
+# ============================================
+# BASE_APPS: Stable apps with retry logic
+BASE_APPS="frappe,erpnext,hrms"
+
+# CUSTOM_APPS: User apps that may fail (non-critical)
+# Will be installed with try/catch - failure won't stop deployment
+CUSTOM_APPS=""
+if [ -n "$CUSTOM_APP_REPO" ] && [ -n "$CUSTOM_APP_NAME" ]; then
+    CUSTOM_APPS="$CUSTOM_APP_NAME"
+fi
+
+# Combined list for backward compatibility
+APPS_TO_INSTALL="$BASE_APPS"
+if [ -n "$CUSTOM_APPS" ]; then
+    APPS_TO_INSTALL="$APPS_TO_INSTALL,$CUSTOM_APPS"
+fi
+
+# ============================================
 # VALIDATION
 # ============================================
 validate_config() {
@@ -310,35 +329,40 @@ EOF
 # INSTALL APPS
 # ============================================
 install_apps() {
-    log "Applar o'rnatilmoqda: $APPS_TO_INSTALL..."
+    log "Applar o'rnatilmoqda..."
+    info "BASE apps (retry logic): $BASE_APPS"
+    if [ -n "$CUSTOM_APPS" ]; then
+        info "CUSTOM apps (try/catch): $CUSTOM_APPS"
+    fi
     
-    sudo -u $FRAPPE_USER bash << 'EOF'
+    sudo -u $FRAPPE_USER bash << EOF
 set -e
 cd /home/frappe/frappe-bench
-export PATH=$PATH:~/.local/bin
+export PATH=\$PATH:~/.local/bin
 
-# Helper function for retrying app installation
+# ============================================
+# HELPER FUNCTION: Retry logic for BASE apps
+# ============================================
 install_app_with_retry() {
-    local app_name=$1
-    local app_source=$2
+    local app_name=\$1
+    local app_source=\$2
     local max_retries=3
     local retry_count=0
     
-    while [ $retry_count -lt $max_retries ]; do
-        echo "🔄 Installing $app_name (attempt $((retry_count + 1))/$max_retries)..."
+    while [ \$retry_count -lt \$max_retries ]; do
+        echo "🔄 Installing \$app_name (attempt \$((retry_count + 1))/\$max_retries)..."
         
-        if bench get-app $app_source; then
-            echo "✅ $app_name installed successfully!"
+        if bench get-app \$app_source; then
+            echo "✅ \$app_name installed successfully!"
             return 0
         else
-            retry_count=$((retry_count + 1))
-            if [ $retry_count -lt $max_retries ]; then
+            retry_count=\$((retry_count + 1))
+            if [ \$retry_count -lt \$max_retries ]; then
                 echo "⚠️  Installation failed, retrying in 10 seconds..."
                 sleep 10
-                # Clean up failed attempt
-                rm -rf "apps/$app_name" 2>/dev/null || true
+                rm -rf "apps/\$app_name" 2>/dev/null || true
             else
-                echo "❌ $app_name installation failed after $max_retries attempts"
+                echo "❌ \$app_name installation failed after \$max_retries attempts"
                 return 1
             fi
         fi
@@ -346,51 +370,90 @@ install_app_with_retry() {
 }
 
 # ============================================
-# PHASE 1: CORE APPS (frappe, erpnext, hrms)
-# Bu applar 99% ishga tushadi, xatolik kam
+# HELPER FUNCTION: Try/catch for CUSTOM apps
 # ============================================
-echo "📦 Phase 1: Installing CORE apps..."
-
-IFS=',' read -ra APPS <<< "frappe,erpnext,hrms"
-for app in "${APPS[@]}"; do
-    app=$(echo $app | xargs)  # trim whitespace
+install_custom_app() {
+    local app_name=\$1
+    local app_repo=\$2
     
-    if [ "$app" = "frappe" ]; then
-        echo "✓ Frappe allaqachon o'rnatilgan"
+    echo ""
+    echo "📦 Installing CUSTOM app: \$app_name"
+    echo "⚠️  WARNING: Custom app may fail (non-critical)"
+    
+    # Try to install with limited retries
+    local retry_count=0
+    local max_retries=2  # Only 2 attempts for custom apps
+    
+    while [ \$retry_count -lt \$max_retries ]; do
+        if bench get-app \$app_repo; then
+            echo "✅ Custom app installed successfully!"
+            return 0
+        else
+            retry_count=\$((retry_count + 1))
+            if [ \$retry_count -lt \$max_retries ]; then
+                echo "⚠️  Retrying custom app installation..."
+                sleep 5
+                rm -rf "apps/\$app_name" 2>/dev/null || true
+            fi
+        fi
+    done
+    
+    # Failed - but don't exit
+    echo "❌ ERROR: Custom app installation failed!"
+    echo "   App: \$app_name"
+    echo "   Repo: \$app_repo"
+    echo "   ⚠️  Base deployment will continue..."
+    return 1
+}
+
+# ============================================
+# PHASE 1: BASE APPS (frappe, erpnext, hrms)
+# Critical apps - must succeed
+# ============================================
+echo ""
+echo "═══════════════════════════════════════════"
+echo "📦 PHASE 1: Installing BASE apps (critical)"
+echo "═══════════════════════════════════════════"
+
+IFS=',' read -ra APPS <<< "$BASE_APPS"
+for app in "\${APPS[@]}"; do
+    app=\$(echo \$app | xargs)  # trim whitespace
+    
+    if [ "\$app" = "frappe" ]; then
+        echo "✓ Frappe already installed (bench init)"
         continue
     fi
     
-    if [ "$app" = "erpnext" ]; then
-        install_app_with_retry "erpnext" "--branch version-15 erpnext"
-    elif [ "$app" = "hrms" ]; then
-        install_app_with_retry "hrms" "--branch version-15 hrms"
+    if [ "\$app" = "erpnext" ]; then
+        install_app_with_retry "erpnext" "--branch $FRAPPE_VERSION erpnext"
+    elif [ "\$app" = "hrms" ]; then
+        install_app_with_retry "hrms" "--branch $FRAPPE_VERSION hrms"
+    else
+        echo "⚠️  Unknown base app: \$app (skipping)"
     fi
 done
 
-# ============================================
-# PHASE 2: CUSTOM APPS (ixtiyoriy)
-# Agar xato bo'lsa, base apps ishlab turadi
-# ============================================
-CUSTOM_APP_REPO=""
-CUSTOM_APP_NAME=""
+echo "✅ BASE apps installation complete!"
 
-if [ -n "$CUSTOM_APP_REPO" ]; then
+# ============================================
+# PHASE 2: CUSTOM APPS (optional, non-critical)
+# Will not stop deployment if fails
+# ============================================
+if [ -n "$CUSTOM_APP_REPO" ] && [ -n "$CUSTOM_APP_NAME" ]; then
     echo ""
-    echo "📦 Phase 2: Installing CUSTOM app..."
-    echo "⚠️  WARNING: Custom app xato berishi mumkin"
-    echo "⚠️  Agar xato bo'lsa, base apps (ERPNext) ishlab turadi"
+    echo "═══════════════════════════════════════════"
+    echo "📦 PHASE 2: Installing CUSTOM apps"
+    echo "═══════════════════════════════════════════"
     
-    # Try-catch mantiq: xato bo'lsa davom et
-    if install_app_with_retry "$CUSTOM_APP_NAME" "$CUSTOM_APP_REPO"; then
-        echo "✓ Custom app muvaffaqiyatli o'rnatildi"
+    # Install custom app with try/catch
+    if install_custom_app "$CUSTOM_APP_NAME" "$CUSTOM_APP_REPO"; then
+        echo "✅ Custom app installed successfully"
     else
-        echo "❌ ERROR: Custom app o'rnatilmadi!"
-        echo "   Repo: $CUSTOM_APP_REPO"
-        echo "   Base deployment davom etadi..."
+        echo "⚠️  Custom app failed, but continuing deployment"
     fi
 else
     echo ""
-    echo "ℹ️  Custom app o'rnatilmaydi (CUSTOM_APP_REPO bo'sh)"
+    echo "ℹ️  No custom apps to install (CUSTOM_APP_REPO not set)"
 fi
 
 EOF
