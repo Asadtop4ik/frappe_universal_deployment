@@ -129,19 +129,34 @@ EOF
     systemctl restart mariadb
     systemctl enable mariadb
     
-    # Root password o'rnatish (secure method)
-    log "MariaDB root password sozlanmoqda..."
+    # ============================================
+    # CRITICAL FIX: Ubuntu 22.04+ MariaDB Authentication
+    # Problem: Default unix_socket plugin, Frappe needs mysql_native_password
+    # Solution: Force mysql_native_password + cleanup test users/databases
+    # ============================================
+    log "MariaDB root authentication sozlanmoqda (Production Fix)..."
     
-    # Temporary file for secure password handling
-    MYSQL_INIT_FILE=$(mktemp)
-    cat > "$MYSQL_INIT_FILE" << SQLEOF
-ALTER USER 'root'@'localhost' IDENTIFIED BY '${MARIADB_ROOT_PASSWORD}';
+    # Execute as root (unix_socket still works at this point)
+    mysql -u root << SQLEOF
+-- Force mysql_native_password authentication
+ALTER USER 'root'@'localhost' IDENTIFIED VIA mysql_native_password USING PASSWORD('${MARIADB_ROOT_PASSWORD}');
+
+-- Security hardening: Remove test users and databases
+DELETE FROM mysql.user WHERE User='';
+DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');
+DROP DATABASE IF EXISTS test;
+DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';
+
+-- Apply changes
 FLUSH PRIVILEGES;
 SQLEOF
-    
-    # Execute with init-file (password not visible in process list)
-    mysql --init-file="$MYSQL_INIT_FILE" 2>/dev/null || warning "MariaDB root password allaqachon o'rnatilgan"
-    rm -f "$MYSQL_INIT_FILE"
+
+    # Verify connection with password
+    if mysql -u root -p"${MARIADB_ROOT_PASSWORD}" -e "SELECT 1;" &>/dev/null; then
+        log "✅ MariaDB root password verified"
+    else
+        error "❌ MariaDB password verification failed!"
+    fi
     
     log "MariaDB sozlandi ✓"
 }
