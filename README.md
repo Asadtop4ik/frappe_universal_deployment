@@ -15,14 +15,21 @@ Professional deployment solution for Frappe/ERPNext projects with CI/CD, domain 
 - ✅ **DigitalOcean UI guide** (step-by-step)
 - ✅ Senior DevOps best practices
 
-## 🆕 Recent Updates (2026-01-25)
+## 🆕 Recent Updates (2026-01-27)
 
+### Latest (v2.1.0) - Critical Production Fixes
+- ✅ **Redis port fix:** 13000 → 6379 (critical for HRMS)
+- ✅ **Nginx log_format:** Auto-injection for Ubuntu 24.04
+- ✅ **MariaDB start validation:** Better error handling
+- ✅ **Service management:** Smart start/reload logic
+- ✅ **Test workflow:** Automated testing on clean server
+- ✅ **Zero-downtime CI/CD:** 4 min → 5-10 sec downtime
+
+### v2.0 (2026-01-25)
 - ✅ Node.js 18 → 20 LTS (future-proof)
-- ✅ Zero-downtime CI/CD (build assets while live)
 - ✅ Smart custom app installation (base apps always succeed)
 - ✅ Modular deployment (SSL, backup separate scripts)
 - ✅ Enhanced security (password handling, firewall)
-- ✅ Removed keraksiz features (build_assets duplicate)
 
 ## ⏱️ Deployment Timeline
 
@@ -125,6 +132,31 @@ git push origin main
 
 **📚 Batafsil guide:** [CI_CD_SETUP.md](CI_CD_SETUP.md)
 
+### 🧪 Test Your Deployment
+
+This repository includes automated testing workflow:
+
+```bash
+# Setup GitHub Secrets for testing:
+#   - DO_DROPLET_IP (Fresh Ubuntu 24.04 server)
+#   - DO_SSH_PRIVATE_KEY
+#   - TEST_SITE_NAME
+#   - TEST_ADMIN_PASSWORD
+#   - TEST_MARIADB_ROOT_PASSWORD
+
+# Then run test workflow from GitHub Actions
+# Actions → Test Deployment → Run workflow
+```
+
+Workflow automatically:
+1. Connects to clean server
+2. Runs full deployment
+3. Verifies installation
+4. Tests HTTP access
+5. Reports results
+
+**Test Workflow:** [.github/workflows/test-deployment.yml](.github/workflows/test-deployment.yml)
+
 ---
 
 ## 🌐 Domain & SSL Setup
@@ -188,18 +220,24 @@ ssh root@your-server-ip
 ## 📦 Project Structure
 
 ```
-frappe_deployment/
+frappe_universal_deploy/
 ├── .env.example              # Configuration template
 ├── README.md                 # This file
-├── DIGITALOCEAN_SETUP.md     # DigitalOcean UI guide (NEW!)
-├── CI_CD_SETUP.md            # GitHub Actions guide (NEW!)
+├── DIGITALOCEAN_SETUP.md     # DigitalOcean UI guide
+├── CI_CD_SETUP.md            # GitHub Actions guide
 ├── DEPLOYMENT_WORKFLOW.md    # Real-world workflow
+├── LICENSE                   # MIT License
 ├── deploy/
-│   ├── deploy.sh            # Main deployment script
+│   ├── deploy.sh            # Main deployment script (✅ v2.1)
+│   ├── 02-setup-domain-ssl.sh  # Domain & SSL setup
+│   ├── 03-restore-backup.sh    # Backup restore
 │   └── README.md            # Deployment details
 ├── templates/
-│   └── github-workflow.yml  # CI/CD template (NEW!)
-├── setup-domain.sh          # Domain & SSL setup (NEW!)
+│   ├── github-workflow.yml  # CI/CD template for custom apps
+│   └── README.md            # Template usage guide
+├── .github/
+│   └── workflows/
+│       └── test-deployment.yml  # Automated testing (NEW!)
 └── backups/                 # Backup files (git ignored)
     ├── .gitignore
     └── .gitkeep
@@ -422,7 +460,18 @@ For issues or questions:
 
 ## 📝 Changelog
 
-### v2.0 (2025-11-01)
+### v2.1.0 (2026-01-27) - Production-Ready
+- ✅ **CRITICAL:** Fixed Redis port configuration (13000 → 6379)
+- ✅ **CRITICAL:** HRMS now installs successfully
+- ✅ Nginx log_format auto-injection for Ubuntu 24.04
+- ✅ MariaDB start validation before configuration
+- ✅ Smart service management (start vs reload)
+- ✅ Supervisor config: symlinks instead of copy
+- ✅ PATH duplication prevention in ~/.bashrc
+- ✅ Added automated test workflow
+- ✅ Enhanced error messages and validation
+
+### v2.0 (2026-01-25)
 - ✅ Ubuntu 24.04 support
 - ✅ Fixed pip externally-managed error
 - ✅ Added Redis auto-configuration
