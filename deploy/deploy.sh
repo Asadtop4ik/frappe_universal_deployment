@@ -33,14 +33,23 @@ info() { echo -e "${BLUE}[INFO]${NC} $1"; }
 # ============================================
 # LOAD CONFIGURATION
 # ============================================
+# LOAD CONFIGURATION
+# ============================================
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
-if [ ! -f "$PROJECT_ROOT/.env" ]; then
-    error ".env fayl topilmadi! .env.example dan nusxa oling: cp .env.example .env"
+# .env ni izlash: 1) current dir, 2) script dir, 3) project root
+if [ -f ".env" ]; then
+    ENV_FILE=".env"
+elif [ -f "$SCRIPT_DIR/.env" ]; then
+    ENV_FILE="$SCRIPT_DIR/.env"
+elif [ -f "$PROJECT_ROOT/.env" ]; then
+    ENV_FILE="$PROJECT_ROOT/.env"
+else
+    error ".env fayl topilmadi! Current, script yoki project root da .env yarating"
 fi
 
-source "$PROJECT_ROOT/.env"
+source "$ENV_FILE"
 
 # ============================================
 # APPS CONFIGURATION
@@ -134,15 +143,37 @@ install_nodejs() {
 configure_mariadb() {
     log "MariaDB sozlanmoqda..."
     
+    # CRITICAL FIX: Ensure required directories exist
+    # Missing /etc/mysql/conf.d/ causes "Fatal error in defaults handling"
+    mkdir -p /etc/mysql/conf.d
+    mkdir -p /var/lib/mysql
+    
+    # Fix permissions
+    chown -R mysql:mysql /var/lib/mysql
+    
+    # Check if database is initialized
+    if [ ! -d "/var/lib/mysql/mysql" ]; then
+        log "MariaDB database not initialized, initializing..."
+        mariadb-install-db --user=mysql --basedir=/usr --datadir=/var/lib/mysql
+    fi
+    
     # MariaDB ni avval start qilish (fresh install uchun)
     systemctl enable mariadb
     
     if systemctl start mariadb; then
         log "MariaDB started successfully ✓"
     else
-        warning "MariaDB start failed, checking logs..."
-        journalctl -xeu mariadb.service --no-pager | tail -20
-        error "MariaDB ishga tushmadi! Logs yuqorida ko'rsatilgan"
+        warning "MariaDB start failed, retrying with initialize..."
+        
+        # Force reinitialize if start fails
+        mariadb-install-db --user=mysql --force 2>&1 | tee /tmp/mariadb-init.log
+        
+        # Try starting again
+        if systemctl start mariadb; then
+            log "MariaDB started after reinitialize ✓"
+        else
+            error "MariaDB ishga tushmadi! Logs: /tmp/mariadb-init.log"
+        fi
     fi
     
     sleep 2
