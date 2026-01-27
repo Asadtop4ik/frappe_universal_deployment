@@ -115,6 +115,19 @@ install_nodejs() {
 configure_mariadb() {
     log "MariaDB sozlanmoqda..."
     
+    # MariaDB ni avval start qilish (fresh install uchun)
+    systemctl enable mariadb
+    
+    if systemctl start mariadb; then
+        log "MariaDB started successfully ✓"
+    else
+        warning "MariaDB start failed, checking logs..."
+        journalctl -xeu mariadb.service --no-pager | tail -20
+        error "MariaDB ishga tushmadi! Logs yuqorida ko'rsatilgan"
+    fi
+    
+    sleep 2
+    
     # Frappe uchun config
     cat > /etc/mysql/mariadb.conf.d/frappe.cnf << EOF
 [mysqld]
@@ -127,7 +140,6 @@ default-character-set = utf8mb4
 EOF
 
     systemctl restart mariadb
-    systemctl enable mariadb
     
     # ============================================
     # CRITICAL FIX: Ubuntu 22.04+ MariaDB Authentication
@@ -336,6 +348,46 @@ EOF
 }
 
 # ============================================
+# CONFIGURE REDIS (FIX PORT ISSUE)
+# ============================================
+configure_redis_ports() {
+    log "Redis portlarini sozlash (6379)..."
+    
+    sudo -u $FRAPPE_USER bash << EOF
+set -e
+cd $BENCH_PATH
+export PATH=\$PATH:~/.local/bin
+
+# Create proper common_site_config.json
+cat > sites/common_site_config.json << 'CONFIG'
+{
+  "background_workers": 1,
+  "file_watcher_port": 6787,
+  "frappe_user": "$FRAPPE_USER",
+  "gunicorn_workers": 4,
+  "live_reload": true,
+  "rebase_on_pull": false,
+  "redis_cache": "redis://127.0.0.1:6379",
+  "redis_queue": "redis://127.0.0.1:6379",
+  "redis_socketio": "redis://127.0.0.1:6379",
+  "restart_supervisor_on_update": true,
+  "restart_systemd_on_update": false,
+  "serve_default_site": true,
+  "shallow_clone": true,
+  "socketio_port": 9000,
+  "use_redis_auth": false,
+  "webserver_port": 8000,
+  "developer_mode": 0,
+  "scheduler_enabled": 1
+}
+CONFIG
+
+EOF
+
+    log "Redis konfiguratsiyasi sozlandi ✓"
+}
+
+# ============================================
 # CREATE SITE
 # ============================================
 create_site() {
@@ -452,22 +504,46 @@ bench setup nginx --yes
 EOF
 
     # Supervisor config
-    cp $BENCH_PATH/config/supervisor.conf /etc/supervisor/conf.d/frappe-bench.conf
+    ln -sf $BENCH_PATH/config/supervisor.conf /etc/supervisor/conf.d/frappe-bench.conf
     
-    # Nginx config (nginx "main" log format fix)
-    sed -i 's/ main;/;/g' $BENCH_PATH/config/nginx.conf
-    cp $BENCH_PATH/config/nginx.conf /etc/nginx/sites-available/frappe-bench.conf
-    ln -sf /etc/nginx/sites-available/frappe-bench.conf /etc/nginx/sites-enabled/frappe-bench.conf
+    # Nginx config - Add log_format if missing
+    if ! grep -q "log_format main" /etc/nginx/nginx.conf; then
+        sed -i '/http {/a \    log_format main '"'"'$remote_addr - $remote_user [$time_local] "$request" '"'"'\n                      '"'"'$status $body_bytes_sent "$http_referer" '"'"'\n                      '"'"'"$http_user_agent" "$http_x_forwarded_for"'"'"';' /etc/nginx/nginx.conf
+    fi
+    
+    # Link nginx config
+    ln -sf $BENCH_PATH/config/nginx.conf /etc/nginx/conf.d/frappe-bench.conf
     rm -f /etc/nginx/sites-enabled/default
     
-    # Test va reload
+    # Test configs
     nginx -t
-    supervisorctl reread
-    supervisorctl update
-    systemctl reload supervisor
-    systemctl restart nginx
+    
+    # Start/reload services
+    if systemctl is-active --quiet nginx; then
+        systemctl reload nginx
+    else
+        systemctl start nginx
+    fi
+    systemctl enable nginx
+    
+    if systemctl is-active --quiet supervisor; then
+        supervisorctl reread
+        supervisorctl update
+        systemctl reload supervisor
+    else
+        systemctl start supervisor
+        systemctl enable supervisor
+        sleep 2
+        supervisorctl reread
+        supervisorctl update
+    fi
     
     log "Production setup tugadi ✓"
+    
+    # Wait and check status
+    sleep 3
+    log "Servislar holati:"
+    supervisorctl status || warning "Supervisor hali to'liq ishlamagan"
 }
 
 # ============================================
@@ -567,6 +643,7 @@ main() {
     configure_redis
     create_frappe_user
     install_bench
+    configure_redis_ports  # Fix Redis port 13000 -> 6379
     install_apps
     create_site
     setup_production
