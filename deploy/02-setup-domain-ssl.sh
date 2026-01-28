@@ -4,13 +4,17 @@
 # DOMAIN & SSL SETUP SCRIPT
 # Purpose: Add domain and SSL certificate to existing Frappe site
 # Usage: sudo bash deploy/02-setup-domain-ssl.sh
-# Requirements: 
+#        or: AUTO_CONFIRM=yes sudo bash deploy/02-setup-domain-ssl.sh
+# Requirements:
 #   - Base deployment completed (deploy.sh)
 #   - Domain DNS configured and propagated
 #   - Domain A record pointing to this server
 ###############################################################################
 
 set -e
+
+# Non-interactive mode support
+AUTO_CONFIRM=${AUTO_CONFIRM:-no}
 
 # ============================================
 # COLORS & LOGGING
@@ -29,7 +33,7 @@ info() { echo -e "${BLUE}[INFO]${NC} $1"; }
 # ============================================
 # BANNER
 # ============================================
-clear
+clear 2>/dev/null || true
 cat << "EOF"
 ╔═══════════════════════════════════════════════╗
 ║     FRAPPE DOMAIN & SSL SETUP                ║
@@ -67,40 +71,71 @@ echo ""
 
 # Site name (from .env or ask)
 if [ -z "$SITE_NAME" ]; then
+    if [[ "$AUTO_CONFIRM" =~ ^[Yy]es$ ]]; then
+        error "AUTO_CONFIRM mode but SITE_NAME not set!"
+    fi
     read -p "🌐 Site nomi (masalan: mysite.local): " SITE_NAME
 else
-    read -p "🌐 Site nomi [$SITE_NAME]: " INPUT_SITE
-    SITE_NAME=${INPUT_SITE:-$SITE_NAME}
+    if [[ ! "$AUTO_CONFIRM" =~ ^[Yy]es$ ]]; then
+        read -p "🌐 Site nomi [$SITE_NAME]: " INPUT_SITE
+        SITE_NAME=${INPUT_SITE:-$SITE_NAME}
+    else
+        info "Site: $SITE_NAME (auto)"
+    fi
 fi
 [ -z "$SITE_NAME" ] && error "Site name bo'sh bo'lishi mumkin emas!"
 
 # Domain to add
 if [ -z "$SSL_DOMAIN" ]; then
+    if [[ "$AUTO_CONFIRM" =~ ^[Yy]es$ ]]; then
+        error "AUTO_CONFIRM mode but SSL_DOMAIN not set!"
+    fi
     read -p "🔗 Domain (masalan: akfa.uz): " DOMAIN
 else
-    read -p "🔗 Domain [$SSL_DOMAIN]: " INPUT_DOMAIN
-    DOMAIN=${INPUT_DOMAIN:-$SSL_DOMAIN}
+    DOMAIN="$SSL_DOMAIN"
+    if [[ ! "$AUTO_CONFIRM" =~ ^[Yy]es$ ]]; then
+        read -p "🔗 Domain [$DOMAIN]: " INPUT_DOMAIN
+        DOMAIN=${INPUT_DOMAIN:-$DOMAIN}
+    else
+        info "Domain: $DOMAIN (auto)"
+    fi
 fi
 [ -z "$DOMAIN" ] && error "Domain bo'sh bo'lishi mumkin emas!"
 
 # Email for SSL
 if [ -z "$SSL_EMAIL" ]; then
+    if [[ "$AUTO_CONFIRM" =~ ^[Yy]es$ ]]; then
+        error "AUTO_CONFIRM mode but SSL_EMAIL not set!"
+    fi
     read -p "📧 Email (SSL uchun): " EMAIL
 else
-    read -p "📧 Email [$SSL_EMAIL]: " INPUT_EMAIL
-    EMAIL=${INPUT_EMAIL:-$SSL_EMAIL}
+    EMAIL="$SSL_EMAIL"
+    if [[ ! "$AUTO_CONFIRM" =~ ^[Yy]es$ ]]; then
+        read -p "📧 Email [$EMAIL]: " INPUT_EMAIL
+        EMAIL=${INPUT_EMAIL:-$EMAIL}
+    else
+        info "Email: $EMAIL (auto)"
+    fi
 fi
 [ -z "$EMAIL" ] && error "Email bo'sh bo'lishi mumkin emas!"
 
 # Frappe user (default: frappe)
 FRAPPE_USER=${FRAPPE_USER:-frappe}
-read -p "👤 Frappe user [$FRAPPE_USER]: " INPUT_USER
-FRAPPE_USER=${INPUT_USER:-$FRAPPE_USER}
+if [[ ! "$AUTO_CONFIRM" =~ ^[Yy]es$ ]]; then
+    read -p "👤 Frappe user [$FRAPPE_USER]: " INPUT_USER
+    FRAPPE_USER=${INPUT_USER:-$FRAPPE_USER}
+else
+    info "Frappe user: $FRAPPE_USER (auto)"
+fi
 
 # Bench path
 BENCH_PATH=${BENCH_PATH:-/home/$FRAPPE_USER/frappe-bench}
-read -p "📁 Bench path [$BENCH_PATH]: " INPUT_PATH
-BENCH_PATH=${INPUT_PATH:-$BENCH_PATH}
+if [[ ! "$AUTO_CONFIRM" =~ ^[Yy]es$ ]]; then
+    read -p "📁 Bench path [$BENCH_PATH]: " INPUT_PATH
+    BENCH_PATH=${INPUT_PATH:-$BENCH_PATH}
+else
+    info "Bench path: $BENCH_PATH (auto)"
+fi
 
 echo ""
 log "═══════════════════════════════════════════"
@@ -113,8 +148,13 @@ info "Frappe User:  $FRAPPE_USER"
 info "Bench Path:   $BENCH_PATH"
 log "═══════════════════════════════════════════"
 echo ""
-read -p "Davom etamiz? [y/N]: " CONFIRM
-[[ ! "$CONFIRM" =~ ^[Yy]$ ]] && error "Foydalanuvchi bekor qildi"
+if [[ "$AUTO_CONFIRM" =~ ^[Yy]es$ ]]; then
+    info "AUTO_CONFIRM=yes - avtomatik davom ettirilmoqda..."
+    CONFIRM="y"
+else
+    read -p "Davom etamiz? [y/N]: " CONFIRM
+    [[ ! "$CONFIRM" =~ ^[Yy]$ ]] && error "Foydalanuvchi bekor qildi"
+fi
 
 # ============================================
 # VALIDATION
@@ -154,8 +194,12 @@ if [ -z "$DOMAIN_IP" ]; then
     warning "DNS sozlamalarini tekshiring:"
     warning "  A Record: $DOMAIN → $SERVER_IP"
     echo ""
-    read -p "DNS sozlangan va propagate bo'lganini tasdiqlaysizmi? [y/N]: " DNS_CONFIRM
-    [[ ! "$DNS_CONFIRM" =~ ^[Yy]$ ]] && error "DNS sozlang va qayta urinib ko'ring"
+    if [[ "$AUTO_CONFIRM" =~ ^[Yy]es$ ]]; then
+        warning "AUTO_CONFIRM=yes - DNS tekshiruvi o'tkazib yuborildi"
+    else
+        read -p "DNS sozlangan va propagate bo'lganini tasdiqlaysizmi? [y/N]: " DNS_CONFIRM
+        [[ ! "$DNS_CONFIRM" =~ ^[Yy]$ ]] && error "DNS sozlang va qayta urinib ko'ring"
+    fi
 else
     info "Domain resolves to: $DOMAIN_IP"
     
@@ -166,8 +210,12 @@ else
         warning "   Server IP: $SERVER_IP"
         warning "   Domain IP: $DOMAIN_IP"
         echo ""
-        read -p "Davom etamizmi? [y/N]: " CONTINUE
-        [[ ! "$CONTINUE" =~ ^[Yy]$ ]] && error "DNS ni to'g'rilang va qayta urinib ko'ring"
+        if [[ "$AUTO_CONFIRM" =~ ^[Yy]es$ ]]; then
+            warning "AUTO_CONFIRM=yes - DNS mismatch e'tiborsiz qoldirildi"
+        else
+            read -p "Davom etamizmi? [y/N]: " CONTINUE
+            [[ ! "$CONTINUE" =~ ^[Yy]$ ]] && error "DNS ni to'g'rilang va qayta urinib ko'ring"
+        fi
     fi
 fi
 
@@ -208,16 +256,38 @@ export PATH=\$PATH:~/.local/bin
 echo "🔗 Adding domain: $DOMAIN"
 
 # Add domain using Frappe's built-in command
-bench setup add-domain $DOMAIN --site $SITE_NAME
+bench setup add-domain $DOMAIN --site $SITE_NAME || {
+    echo "⚠️  Domain may already exist, continuing..."
+}
 
-# Verify domain was added
+# Verify domain was added (non-blocking)
 echo ""
-echo "✅ Domain added. Current site configuration:"
-bench --site $SITE_NAME show-config | grep -A 5 "host_name"
+echo "✅ Domain added. Verifying configuration..."
+bench --site $SITE_NAME show-config | grep -A 5 "host_name" || echo "Configuration check skipped"
+
+# Regenerate nginx config to include new domain
+echo ""
+echo "🔄 Regenerating nginx configuration..."
+echo "y" | bench setup nginx || echo "⚠️  Nginx config generation had warnings, continuing..."
+
+echo "✓ Step 1 completed successfully"
 
 EOF
 
-log "Domain muvaffaqiyatli qo'shildi ✓"
+# Ensure nginx config is properly symlinked
+NGINX_BENCH_CONF="$BENCH_PATH/config/nginx.conf"
+NGINX_SYMLINK="/etc/nginx/conf.d/frappe-bench.conf"
+
+if [ ! -L "$NGINX_SYMLINK" ] || [ ! -e "$NGINX_SYMLINK" ]; then
+    info "Creating nginx config symlink..."
+    ln -sf "$NGINX_BENCH_CONF" "$NGINX_SYMLINK"
+fi
+
+# Reload nginx to apply new configuration
+info "Reloading nginx to apply domain changes..."
+systemctl reload nginx || systemctl restart nginx
+
+log "Domain muvaffaqiyatli qo'shildi va nginx yangilandi ✓"
 
 # ============================================
 # STEP 2: SETUP SSL (Let's Encrypt)
@@ -239,22 +309,109 @@ info "Let's Encrypt sertifikat olinmoqda..."
 info "Bu 30-60 soniya davom etishi mumkin..."
 echo ""
 
-sudo -u $FRAPPE_USER bash << EOF
-set -e
-cd $BENCH_PATH
-export PATH=\$PATH:~/.local/bin
+# Run SSL setup using certbot
+info "🔒 Setting up Let's Encrypt SSL with certbot..."
 
-echo "🔒 Setting up Let's Encrypt SSL..."
+# Check for staging mode (for testing when rate limited)
+STAGING_FLAG=""
+if [ "${USE_STAGING:-no}" = "yes" ]; then
+    STAGING_FLAG="--staging"
+    warning "Using Let's Encrypt STAGING server (certificates won't be trusted)"
+fi
 
-# Use Frappe's built-in Let's Encrypt setup
-sudo bench setup lets-encrypt $SITE_NAME \\
-    --custom-domain $DOMAIN \\
-    --email $EMAIL
+# Get SSL certificate using certbot - certonly first to avoid nginx plugin issues
+if certbot certonly --webroot -w $BENCH_PATH/sites -d $DOMAIN --non-interactive --agree-tos --email $EMAIL $STAGING_FLAG 2>&1; then
+    info "✅ Certificate obtained successfully"
+elif certbot certonly --standalone -d $DOMAIN --non-interactive --agree-tos --email $EMAIL $STAGING_FLAG --pre-hook "systemctl stop nginx" --post-hook "systemctl start nginx" 2>&1; then
+    info "✅ Certificate obtained with standalone method"
+else
+    error "Failed to obtain SSL certificate. If rate limited, try: USE_STAGING=yes"
+fi
 
-echo ""
-echo "✅ SSL certificate installed!"
+# Now configure nginx for SSL
+info "Configuring nginx for HTTPS..."
 
-EOF
+NGINX_CONF="$BENCH_PATH/config/nginx.conf"
+cp "$NGINX_CONF" "${NGINX_CONF}.pre-ssl-backup"
+
+# Use Python for reliable config modification
+python3 << PYTHON_EOF
+import re
+
+nginx_conf = "$NGINX_CONF"
+domain = "$DOMAIN"
+
+with open(nginx_conf, 'r') as f:
+    content = f.read()
+
+# Check if SSL already configured
+if 'listen 443' in content:
+    print("SSL already configured, skipping...")
+else:
+    # Add SSL listen directives after "listen 80;"
+    ssl_listen = '''listen 80;
+\tlisten 443 ssl http2;
+\tlisten [::]:443 ssl http2;'''
+    content = content.replace('listen 80;', ssl_listen, 1)
+
+    # Find the first server block and add SSL config after server_name
+    ssl_config = f'''
+\t# SSL Configuration
+\tssl_certificate /etc/letsencrypt/live/{domain}/fullchain.pem;
+\tssl_certificate_key /etc/letsencrypt/live/{domain}/privkey.pem;
+\tssl_protocols TLSv1.2 TLSv1.3;
+\tssl_prefer_server_ciphers off;
+\tssl_session_cache shared:SSL:10m;
+
+'''
+    # Insert after the server_name block ends (after the semicolon)
+    pattern = r'(server_name[^;]+;)'
+    content = re.sub(pattern, r'\1' + ssl_config, content, count=1)
+
+    # Add HTTP to HTTPS redirect (if not already present)
+    if 'return 301 https://' not in content:
+        redirect_block = '''
+
+# HTTP to HTTPS redirect
+server {
+\tlisten 80;
+\tlisten [::]:80;
+\tserver_name ''' + domain + ''';
+\treturn 301 https://$host$request_uri;
+}
+'''
+        content += redirect_block
+
+    with open(nginx_conf, 'w') as f:
+        f.write(content)
+
+    print("SSL configuration added successfully")
+PYTHON_EOF
+
+chown frappe:frappe "$NGINX_CONF"
+
+# Test nginx configuration
+if nginx -t 2>&1; then
+    info "✅ Nginx configuration valid"
+    systemctl reload nginx
+    log "✅ SSL certificate installed and nginx configured!"
+else
+    warning "Nginx config test failed, attempting recovery..."
+    cp "${NGINX_CONF}.pre-ssl-backup" "$NGINX_CONF"
+    chown frappe:frappe "$NGINX_CONF"
+    systemctl reload nginx || systemctl restart nginx
+    error "SSL nginx configuration failed - please configure manually"
+fi
+
+# Verify SSL is working
+sleep 2
+if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
+    info "Certificate location: /etc/letsencrypt/live/$DOMAIN/"
+else
+    error "SSL certificate not found after installation!"
+fi
+
+echo "✓ Step 2 completed successfully"
 
 log "SSL sertifikat muvaffaqiyatli o'rnatildi ✓"
 

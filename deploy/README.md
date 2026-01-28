@@ -68,7 +68,11 @@ sudo bash deploy/deploy.sh
 
 **Usage:**
 ```bash
+# Interactive mode (prompts for confirmation)
 sudo bash deploy/02-setup-domain-ssl.sh
+
+# Non-interactive mode (auto-confirm all prompts)
+AUTO_CONFIRM=yes sudo bash deploy/02-setup-domain-ssl.sh
 ```
 
 ### 3. `03-restore-backup.sh` - Backup Restore
