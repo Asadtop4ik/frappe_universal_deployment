@@ -744,6 +744,38 @@ configure_firewall() {
 }
 
 # ============================================
+# SETUP AUTO BACKUP CRON (Conditional)
+# ============================================
+setup_auto_backup() {
+    # Check if auto backup is enabled
+    if [ "$ENABLE_AUTO_BACKUP" != "true" ]; then
+        info "Auto backup o'chirilgan (ENABLE_AUTO_BACKUP=true qiling yoqish uchun)"
+        return 0
+    fi
+    
+    log "Auto backup cron sozlanmoqda..."
+    
+    # Check if cron_setup.sh exists
+    CRON_SCRIPT="$PROJECT_ROOT/backups/cron_setup.sh"
+    if [ ! -f "$CRON_SCRIPT" ]; then
+        warning "Cron setup script topilmadi: $CRON_SCRIPT"
+        return 0
+    fi
+    
+    # Make executable
+    chmod +x "$CRON_SCRIPT"
+    chmod +x "$PROJECT_ROOT/backups/backup.sh" 2>/dev/null || true
+    
+    # Run cron setup
+    if bash "$CRON_SCRIPT"; then
+        log "Auto backup cron sozlandi ✓"
+    else
+        warning "Auto backup cron sozlashda xatolik"
+        warning "Manual: bash backups/cron_setup.sh"
+    fi
+}
+
+# ============================================
 # PRINT SUCCESS MESSAGE
 # ============================================
 print_success() {
@@ -758,16 +790,22 @@ print_success() {
     echo ""
     warning "MUHIM: Administrator parolini o'zgartiring!"
     echo ""
+    
+    # Show auto backup status
+    if [ "$ENABLE_AUTO_BACKUP" = "true" ]; then
+        info "Auto Backup: ✓ Yoqilgan ($BACKUP_CRON)"
+    fi
+    echo ""
+    
     info "Foydali buyruqlar:"
     info "  cd $BENCH_PATH"
     info "  bench --site $SITE_NAME status"
-    info "  bench --site $SITE_NAME logs"
+    info "  bench --site $SITE_NAME console"
     info "  sudo supervisorctl status"
     echo ""
     info "Keyingi qadamlar:"
     info "  1. Domain & SSL: sudo bash deploy/02-setup-domain-ssl.sh"
     info "  2. Backup restore: sudo bash deploy/03-restore-backup.sh"
-    info "  3. Custom app qo'shish: Manual install"
     log "=================================================="
 }
 
@@ -793,6 +831,9 @@ main() {
     create_site
     setup_production
     configure_firewall
+    
+    # Auto backup cron setup (if ENABLE_AUTO_BACKUP=true)
+    setup_auto_backup
     
     print_success
 }
