@@ -523,10 +523,9 @@ git push origin feature/new-report
 
 ---
 
-**Last Updated:** November 3, 2025  
 **Tested with:** GitHub Actions, Frappe v15, Ubuntu 24.04  
 **Author:** Asadbek (@Asadtop4ik)
 
 ---
 
-**Savollar bo'lsa:** GitHub Issues da yozing yoki Telegram: @asadtop4ik
+**Savollar bo'lsa:** GitHub Issues da yozing yoki Telegram: @AzamatovAsadbek

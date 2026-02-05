@@ -359,5 +359,3 @@ sudo netstat -tulpn | grep -E ':(80|443|3306|6379|11000|13000|9000)'
 ```
 
 ---
-
-**Last Updated:** November 1, 2025

@@ -488,4 +488,3 @@ MIT License - Free to use for personal and commercial projects
 
 ---
 
-**Made with ❤️ by Senior DevOps Engineers**

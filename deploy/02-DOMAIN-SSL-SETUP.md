@@ -277,6 +277,3 @@ deploy_ssl:
 | 1.0 | 2026-01-20 | Initial release |
 
 ---
-
-**Author:** DevOps Team
-**Support:** Create an issue at GitHub repository
