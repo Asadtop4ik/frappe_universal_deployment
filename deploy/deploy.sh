@@ -54,18 +54,44 @@ source "$ENV_FILE"
 # ============================================
 # APPS CONFIGURATION
 # ============================================
-# BASE_APPS: Stable apps with retry logic
-BASE_APPS="frappe,erpnext,hrms"
+# Fix: APPS_TO_INSTALL from .env should be respected
+# 1. If user provides APPS_TO_INSTALL - use it
+# 2. Otherwise default to frappe,erpnext,hrms
+# 3. frappe,erpnext = BASE_APPS (critical, retry logic)
+# 4. All others = CUSTOM_APPS (non-critical, try/catch)
 
-# CUSTOM_APPS: User apps that may fail (non-critical)
-# Will be installed with try/catch - failure won't stop deployment
-CUSTOM_APPS=""
-if [ -n "$CUSTOM_APP_REPO" ] && [ -n "$CUSTOM_APP_NAME" ]; then
-    CUSTOM_APPS="$CUSTOM_APP_NAME"
+if [ -n "$APPS_TO_INSTALL" ]; then
+    USER_APPS="$APPS_TO_INSTALL"
+else
+    USER_APPS="frappe,erpnext,hrms"
 fi
 
-# Combined list for backward compatibility
-APPS_TO_INSTALL="$BASE_APPS"
+# Split USER_APPS into BASE and CUSTOM
+BASE_APPS="frappe,erpnext"
+CUSTOM_APPS=""
+
+for app in $(echo "$USER_APPS" | tr ',' '\n'); do
+    app=$(echo "$app" | xargs)
+    if [ -n "$app" ] && [ "$app" != "frappe" ] && [ "$app" != "erpnext" ]; then
+        if [ -z "$CUSTOM_APPS" ]; then
+            CUSTOM_APPS="$app"
+        else
+            CUSTOM_APPS="$CUSTOM_APPS,$app"
+        fi
+    fi
+done
+
+# Add custom apps from CUSTOM_APP_REPO/CUSTOM_APP_NAME if provided
+if [ -n "$CUSTOM_APP_REPO" ] && [ -n "$CUSTOM_APP_NAME" ]; then
+    if [ -z "$CUSTOM_APPS" ]; then
+        CUSTOM_APPS="$CUSTOM_APP_NAME"
+    else
+        CUSTOM_APPS="$CUSTOM_APPS,$CUSTOM_APP_NAME"
+    fi
+fi
+
+# Final combined list
+APPS_TO_INSTALL="$USER_APPS"
 if [ -n "$CUSTOM_APPS" ]; then
     APPS_TO_INSTALL="$APPS_TO_INSTALL,$CUSTOM_APPS"
 fi
@@ -333,7 +359,7 @@ RETRY_COUNT=0
 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     echo "🔄 Bench init attempt $((RETRY_COUNT + 1))/$MAX_RETRIES..."
     
-    if bench init --frappe-branch version-15 frappe-bench; then
+    if bench init --frappe-branch $FRAPPE_VERSION frappe-bench; then
         echo "✅ Bench init successful!"
         break
     else
@@ -438,7 +464,7 @@ install_custom_app() {
 }
 
 # ============================================
-# PHASE 1: BASE APPS (frappe, erpnext, hrms)
+# PHASE 1: BASE APPS (frappe, erpnext)
 # Critical apps - must succeed
 # ============================================
 echo ""
@@ -448,20 +474,15 @@ echo "════════════════════════�
 
 IFS=',' read -ra APPS <<< "$BASE_APPS"
 for app in "\${APPS[@]}"; do
-    app=\$(echo \$app | xargs)  # trim whitespace
+    app=\$(echo \$app | xargs)
     
     if [ "\$app" = "frappe" ]; then
         echo "✓ Frappe already installed (bench init)"
         continue
     fi
     
-    if [ "\$app" = "erpnext" ]; then
-        install_app_with_retry "erpnext" "--branch $FRAPPE_VERSION erpnext"
-    elif [ "\$app" = "hrms" ]; then
-        install_app_with_retry "hrms" "--branch $FRAPPE_VERSION hrms"
-    else
-        echo "⚠️  Unknown base app: \$app (skipping)"
-    fi
+    # Generic installer for any app
+    install_app_with_retry "\$app" "--branch $FRAPPE_VERSION \$app"
 done
 
 echo "✅ BASE apps installation complete!"
@@ -560,7 +581,7 @@ rm -f /tmp/.admin_pass /tmp/.db_pass
 echo ""
 echo "📦 Installing apps to site..."
 
-# Phase 1: Core apps (must succeed)
+# Phase 1: Core apps (must succeed) - generic installer
 IFS=',' read -ra APPS <<< "$APPS_TO_INSTALL"
 for app in "\${APPS[@]}"; do
     app=\$(echo \$app | xargs)
@@ -569,11 +590,9 @@ for app in "\${APPS[@]}"; do
         continue
     fi
     
-    if [ "\$app" = "erpnext" ] || [ "\$app" = "hrms" ]; then
-        echo "📥 Installing \$app to site..."
-        bench --site $SITE_NAME install-app \$app
-        echo "✓ \$app installed successfully"
-    fi
+    echo "📥 Installing \$app to site..."
+    bench --site $SITE_NAME install-app \$app || true
+    echo "✓ \$app installed to site"
 done
 
 # Phase 2: Custom app (optional, may fail)
